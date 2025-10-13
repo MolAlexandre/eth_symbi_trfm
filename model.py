@@ -2,7 +2,8 @@
 import torch
 import torch.nn as nn
 import math
-from embedding import BERTEmbeddings
+from embedding import BERTEmbeddings, VITEmbeddings
+
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads, dropout=0.1, symmetric_init=False):
@@ -164,8 +165,7 @@ class EncoderBlock(nn.Module):
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, vocab_size, d_model, num_heads, num_layers, d_hidden, 
-                 max_len=512, dropout=0.1, symmetric_init=False):
+    def __init__(self, vocab_size, d_model, num_heads, num_layers, d_hidden, max_len=512, dropout=0.1, symmetric_init=False):
         '''
         Complete encoder-only Transformer.
 
@@ -333,4 +333,127 @@ class BERTForMLM(nn.Module):
         loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
         loss = loss_fct(logits_flat, labels_flat)
         
+        return loss
+
+
+
+class VITHead(nn.Module):
+    """Classification head pour ViT."""
+    
+    def __init__(self, num_classes, d_model, d_hidden, dropout=0.1):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
+        self.fc1 = nn.Linear(d_model, d_hidden)
+        self.activation = nn.GELU()
+        self.dropout = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(d_hidden, num_classes)
+    
+    def forward(self, x):
+        """
+        Args:
+            x: [batch, seq_len, d_model] - sortie de l'encoder
+        Returns:
+            logits: [batch, num_classes]
+        """
+        # Extract CLS token
+        cls_token = x[:, 0, :]  # [batch, d_model]
+        
+        # Normalize
+        cls_token = self.layer_norm(cls_token)
+        
+        # MLP layers
+        x = self.fc1(cls_token)
+        x = self.activation(x)
+        x = self.dropout(x)
+        logits = self.fc2(x)
+        
+        return logits
+
+
+class VITForClassification(nn.Module):
+    """Vision Transformer pour classification d'images (CIFAR-10)."""
+    
+    def __init__(self, num_classes=10, d_model=256, num_heads=4, num_layers=6,
+                 d_hidden=1024, img_size=32, patch_size=4, in_channels=3,
+                 dropout=0.1, symmetric_init=False):
+        """
+        Args:
+            num_classes: Nombre de classes (10 pour CIFAR-10)
+            d_model: Dimension du modèle (256 pour config mini)
+            num_heads: Nombre de têtes d'attention (doit diviser d_model)
+            num_layers: Nombre de couches encoder (6 recommandé)
+            d_hidden: Dimension cachée FFN (1024 = 4*d_model)
+            img_size: Taille image (32 pour CIFAR-10)
+            patch_size: Taille patches (4 → 64 patches, 8 → 16 patches)
+            in_channels: Canaux RGB (3)
+            dropout: Probabilité dropout
+            symmetric_init: True pour Wq = Wk
+        """
+        super().__init__()
+        
+        # Vérifications
+        assert img_size % patch_size == 0, "img_size doit être divisible par patch_size"
+        assert d_model % num_heads == 0, "d_model doit être divisible par num_heads"
+        
+        self.num_classes = num_classes
+        self.d_model = d_model
+        self.num_patches = (img_size // patch_size) ** 2
+        
+        # Patch + positional embeddings
+        self.embeddings = VITEmbeddings(
+            d_embedding=d_model,
+            patch_size=patch_size,
+            img_size=img_size,
+            in_channels=in_channels
+        )
+        
+        # Encoder layers (réutilise EncoderBlock de BERT)
+        self.encoder_layers = nn.ModuleList([
+            EncoderBlock(d_model, num_heads, d_hidden, dropout, symmetric_init)
+            for _ in range(num_layers)
+        ])
+        
+        # LayerNorm final
+        self.norm = nn.LayerNorm(d_model, eps=1e-6)
+        
+        # Classification head
+        self.head = VITHead(num_classes, d_model, d_hidden, dropout)
+    
+    def forward(self, images):
+        """
+        Forward pass.
+        
+        Args:
+            images: [batch_size, 3, 32, 32]
+        Returns:
+            logits: [batch_size, num_classes]
+        """
+        # Embeddings: [batch, num_patches+1, d_model]
+        x = self.embeddings(images)
+        
+        # Encoder layers
+        for layer in self.encoder_layers:
+            x = layer(x, mask=None)
+        
+        # Final normalization
+        x = self.norm(x)
+        
+        # Classification
+        logits = self.head(x)
+        
+        return logits
+    
+    def compute_loss(self, images, labels):
+        """
+        Compute cross-entropy loss.
+        
+        Args:
+            images: [batch_size, 3, 32, 32]
+            labels: [batch_size] - class indices (0-9 for CIFAR-10)
+        Returns:
+            loss: scalar
+        """
+        logits = self.forward(images)
+        loss_fct = nn.CrossEntropyLoss()
+        loss = loss_fct(logits, labels)
         return loss

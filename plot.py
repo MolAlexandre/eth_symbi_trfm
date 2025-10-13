@@ -159,7 +159,83 @@ def plot_convergence_one(csv_standard, save_path='result_1M_100K_standard.png'):
     print(f"RÉSULTATS DE L\'EXPÉRIENCE")
     print(f"{'='*70}")
 
+def plot_vit_accuracy(csv_file, save_path='vit_accuracy_evolution.png'):
+    """Plot ViT training and validation accuracy over epochs."""
+    df = pd.read_csv(csv_file)
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    # 1. Accuracy Evolution
+    ax1 = axes[0]
+    ax1.plot(df['epoch'], df['train_acc'], 
+             label='Training Accuracy', linewidth=2.5, marker='o', markersize=6, color='#2ca02c')
+    ax1.plot(df['epoch'], df['val_acc'],
+             label='Validation Accuracy', linewidth=2.5, marker='s', markersize=6, color='#d62728')
+    ax1.set_xlabel('Epoch', fontsize=13, fontweight='bold')
+    ax1.set_ylabel('Accuracy (%)', fontsize=13, fontweight='bold')
+    ax1.set_title('ViT Accuracy Evolution\n(Training vs Validation)', 
+                  fontsize=15, fontweight='bold')
+    ax1.legend(fontsize=12, loc='lower right')
+    ax1.grid(alpha=0.3, linestyle='--')
+    ax1.set_ylim(0, 100)
+
+    # 2. Loss Evolution
+    ax2 = axes[1]
+    ax2.plot(df['epoch'], df['train_loss'],
+             label='Training Loss', linewidth=2.5, marker='o', markersize=6, color='#1f77b4')
+    ax2.plot(df['epoch'], df['val_loss'],
+             label='Validation Loss', linewidth=2.5, marker='s', markersize=6, color='#ff7f0e')
+    ax2.set_xlabel('Epoch', fontsize=13, fontweight='bold')
+    ax2.set_ylabel('Loss', fontsize=13, fontweight='bold')
+    ax2.set_title('ViT Loss Evolution', fontsize=15, fontweight='bold')
+    ax2.legend(fontsize=12, loc='upper right')
+    ax2.grid(alpha=0.3, linestyle='--')
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"✓ Graphique sauvegardé: {save_path}")
+
+    # Afficher les résultats
+    print(f"\n{'='*70}")
+    print(f"RÉSULTATS ViT TRAINING")
+    print(f"{'='*70}")
+    print(f"Epoch finale:             {df['epoch'].iloc[-1]}")
+    print(f"Training Loss finale:     {df['train_loss'].iloc[-1]:.4f}")
+    print(f"Validation Loss finale:   {df['val_loss'].iloc[-1]:.4f}")
+    print(f"Training Accuracy:        {df['train_acc'].iloc[-1]:.2f}%")
+    print(f"Validation Accuracy:      {df['val_acc'].iloc[-1]:.2f}%")
+    print(f"Best Val Accuracy:        {df['val_acc'].max():.2f}% @ epoch {df.loc[df['val_acc'].idxmax(), 'epoch']}")
+    print(f"{'='*70}\n")
+
+
 if __name__ == "__main__":
-    plot_convergence_one('metrics_standard.csv')
+    import sys
+    
+    print("\n=== MENU DE PLOTTING ===")
+    print("1. Plot convergence comparison (2 CSV: standard + symmetric)")
+    print("2. Plot convergence one (1 CSV: standard only)")
+    print("3. Plot ViT accuracy (1 CSV: ViT metrics)")
+    print("========================\n")
+    
+    choice = input("Choisir une option (1/2/3): ").strip()
+    
+    if choice == "1":
+        csv_std = input("CSV Standard (défaut: metrics_standard.csv): ").strip() or "metrics_standard.csv"
+        csv_sym = input("CSV Symmetric (défaut: metrics_symmetric.csv): ").strip() or "metrics_symmetric.csv"
+        save_path = input("Nom de sortie (défaut: convergence_comparison.png): ").strip() or "convergence_comparison.png"
+        plot_convergence_comparison(csv_std, csv_sym, save_path)
+    
+    elif choice == "2":
+        csv_std = input("CSV Standard (défaut: metrics_standard.csv): ").strip() or "metrics_standard.csv"
+        save_path = input("Nom de sortie (défaut: result_1M_100K_standard.png): ").strip() or "result_1M_100K_standard.png"
+        plot_convergence_one(csv_std, save_path)
+    
+    elif choice == "3":
+        csv_vit = input("CSV ViT (défaut: metrics_vit_standard.csv): ").strip() or "metrics_vit_standard.csv"
+        save_path = input("Nom de sortie (défaut: vit_accuracy_evolution.png): ").strip() or "vit_accuracy_evolution.png"
+        plot_vit_accuracy(csv_vit, save_path)
 
-
+    
+    else:
+        print("Option invalide!")
+        sys.exit(1)

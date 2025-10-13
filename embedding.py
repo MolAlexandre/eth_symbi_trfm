@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 
+
 class BERTEmbeddings(nn.Module):   
     def __init__(self, vocab_size, d_model, max_len=512, dropout=0.1):
         """
@@ -57,15 +58,50 @@ class BERTEmbeddings(nn.Module):
         
         return embeddings
 
+
 class VITEmbeddings(nn.Module):
-    def __init__(self):
-        pass
+    def __init__(self, d_embedding: int, patch_size: int, img_size: int = 32, in_channels: int = 3):
+        super().__init__()
+        self.d_embedding = d_embedding
+        self.patch_size = patch_size
+        self.img_size = img_size
+        self.num_patches = (img_size // patch_size) ** 2
+        
+        # Projection des patches avec Conv2d
+        self.patch_embedding = nn.Conv2d(
+            in_channels=in_channels, 
+            out_channels=d_embedding, 
+            kernel_size=patch_size, 
+            stride=patch_size
+        )
+        
+        # CLS token: un seul token appris, étendu dynamiquement
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, d_embedding))
+        
+        # Position embedding: num_patches + 1 pour le CLS token
+        self.position_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, d_embedding) * 0.02)
 
-    def _create_positional_encoding(self):
-        pass
-
+        self.layer_norm = nn.LayerNorm(d_embedding, eps=1e-6)
+        self.dropout = nn.Dropout(0.0)  # Standard ViT
     
     def forward(self, x):
-        pass
-
-
+        # x shape: [batch_size, 3, 32, 32]
+        batch_size = x.shape[0]
+        
+        # Projection des patches
+        x = self.patch_embedding(x)  # [batch_size, d_embedding, h_patches, w_patches]
+        x = x.flatten(2)  # [batch_size, d_embedding, num_patches]
+        x = x.transpose(1, 2)  # [batch_size, num_patches, d_embedding]
+        
+        # Expansion du CLS token pour le batch
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # [batch_size, 1, d_embedding]
+        
+        # Concaténation CLS + patches
+        x = torch.cat([cls_tokens, x], dim=1)  # [batch_size, num_patches + 1, d_embedding]
+        
+        # Ajout des positional embeddings
+        x = x + self.position_embedding  # [batch_size, num_patches + 1, d_embedding]
+        x = self.layer_norm(x)
+        x = self.dropout(x)
+        
+        return x

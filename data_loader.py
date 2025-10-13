@@ -1,8 +1,9 @@
 from datasets import load_dataset, DatasetDict, load_from_disk
 import torch
 from transformers import BertTokenizer
-from torch.utils.data import DataLoader as TorchDataLoader
+from torch.utils.data import DataLoader
 import os
+from torchvision import datasets, transforms
 
 
 class WikipediaDatasetManager:
@@ -157,7 +158,7 @@ class WikipediaDatasetManager:
         )
         
         # Créer les DataLoaders PyTorch
-        train_loader = TorchDataLoader(
+        train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
             shuffle=True,
@@ -166,7 +167,7 @@ class WikipediaDatasetManager:
             pin_memory=torch.cuda.is_available()
         )
         
-        val_loader = TorchDataLoader(
+        val_loader = DataLoader(
             val_dataset,
             batch_size=batch_size,
             shuffle=False,
@@ -288,3 +289,73 @@ class MLMCollator:
             (input_ids == self.cls_token_id) |
             (input_ids == self.sep_token_id)
         )
+    
+
+class CifarDatasetManager:
+    def __init__(self, cache_dir="./data_cache"):
+        self.cache_dir = cache_dir
+        self.cifar_cache = os.path.join(cache_dir, "cifar10")
+
+        self.transform_train = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(32, padding=4),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=(0.4914, 0.4822, 0.4465),
+                std=(0.2470, 0.2435, 0.2616))
+            ])
+        self.transform_val = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=(0.4914, 0.4822, 0.4465),
+                std=(0.2470, 0.2435, 0.2616))
+            ])
+
+    def create_dataloaders(self, batch_size, num_workers):
+        # Vérifier si CIFAR-10 est déjà téléchargé
+        cifar_exists = os.path.exists(os.path.join(self.cifar_cache, "cifar-10-batches-py"))
+        
+        if cifar_exists:
+            print(f"✓ Chargement de CIFAR-10 depuis le cache: {self.cifar_cache}")
+        else:
+            print(f"Cache non trouvé, téléchargement de CIFAR-10...")
+            os.makedirs(self.cifar_cache, exist_ok=True)
+        
+        train_dataset = datasets.CIFAR10(
+            root=self.cifar_cache,
+            train=True,
+            download=not cifar_exists,
+            transform=self.transform_train
+        )
+
+        val_dataset = datasets.CIFAR10(
+            root=self.cifar_cache,
+            train=False,
+            download=not cifar_exists,
+            transform=self.transform_val
+        )
+
+        if not cifar_exists:
+            print("✓ CIFAR-10 téléchargé et sauvegardé dans le cache")
+
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=torch.cuda.is_available()
+        )
+
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=torch.cuda.is_available()
+        )
+
+        print(f"✓ DataLoaders créés: {len(train_loader)} batches train, {len(val_loader)} batches val")
+        print(f"  Train: {len(train_dataset)} exemples")
+        print(f"  Validation: {len(val_dataset)} exemples")
+
+        return train_loader, val_loader
