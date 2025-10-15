@@ -49,7 +49,7 @@ class VitTrainer:
         self.start_epoch = 0
         self.global_step = 0
         self.best_val_acc = 0.0
-        self.metrics_history = []  # SAUVEGARDÉ DANS CHAQUE CHECKPOINT
+        self.metrics_history = [] 
 
     def _get_linear_warmup_scheduler(self):
         """Crée un scheduler avec warmup linéaire puis décroissance linéaire."""
@@ -287,8 +287,10 @@ class VitTrainer:
             })
 
             # Sauvegarder checkpoint de l'epoch (avec tout l'historique)
-            checkpoint_path = os.path.join(self.save_dir, f"epoch_{epoch+1}.pt")
-            self.save_checkpoint(epoch, val_acc, checkpoint_path)
+            if (epoch + 1) % 25 == 0:
+                checkpoint_path = os.path.join(self.save_dir, f"epoch_{epoch+1}.pt")
+                self.save_checkpoint(epoch, val_acc, checkpoint_path)
+                print(f"✓ Checkpoint sauvegardé pour l'epoch {epoch+1}")
 
             # Sauvegarder le meilleur modèle (avec tout l'historique)
             if val_acc > self.best_val_acc:
